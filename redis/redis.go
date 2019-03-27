@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/Clever/leakybucket"
-	"github.com/garyburd/redigo/redis"
+	"github.com/gomodule/redigo/redis"
 )
 
 type bucket struct {
