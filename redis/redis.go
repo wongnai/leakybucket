@@ -147,7 +147,7 @@ func New(network, address string) (*Storage, error) {
 
 // NewFromPool create new Storage with existing connection pool
 func NewFromPool(pool *redis.Pool) (*Storage, error) {
-	return nil, &Storage{
+	return &Storage{
 		pool: pool,
 	}, nil
 }
