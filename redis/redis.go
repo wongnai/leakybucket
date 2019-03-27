@@ -1,9 +1,10 @@
 package redis
 
 import (
+	"time"
+
 	"github.com/Clever/leakybucket"
 	"github.com/garyburd/redigo/redis"
-	"time"
 )
 
 type bucket struct {
@@ -142,6 +143,13 @@ func New(network, address string) (*Storage, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// NewFromPool create new Storage with existing connection pool
+func NewFromPool(pool *redis.Pool) (*Storage, error) {
+	return nil, &Storage{
+		pool: pool,
+	}, nil
 }
 
 func min(a, b uint) uint {
