@@ -1,10 +1,11 @@
 package memory
 
 import (
+	"context"
 	"sync"
 	"time"
 
-	"github.com/Clever/leakybucket"
+	"github.com/wongnai/leakybucket"
 )
 
 type bucket struct {
@@ -44,6 +45,8 @@ func (b *bucket) Add(amount uint) (leakybucket.BucketState, error) {
 	return leakybucket.BucketState{Capacity: b.capacity, Remaining: b.remaining, Reset: b.reset}, nil
 }
 
+func (b *bucket) SetContext(ctx context.Context) {}
+
 // Storage is a non thread-safe in-memory leaky bucket factory.
 type Storage struct {
 	buckets map[string]*bucket
@@ -57,7 +60,7 @@ func New() *Storage {
 }
 
 // Create a bucket.
-func (s *Storage) Create(name string, capacity uint, rate time.Duration) (leakybucket.Bucket, error) {
+func (s *Storage) Create(ctx context.Context, name string, capacity uint, rate time.Duration) (leakybucket.Bucket, error) {
 	b, ok := s.buckets[name]
 	if ok {
 		return b, nil

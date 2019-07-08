@@ -1,6 +1,7 @@
 package leakybucket
 
 import (
+	"context"
 	"errors"
 	"time"
 )
@@ -23,6 +24,8 @@ type Bucket interface {
 
 	// Add to the bucket. Returns bucket state after adding.
 	Add(uint) (BucketState, error)
+
+	SetContext(ctx context.Context)
 }
 
 // BucketState is a snapshot of a bucket's properties.
@@ -36,5 +39,5 @@ type BucketState struct {
 type Storage interface {
 	// Create a bucket with a name, capacity, and rate.
 	// rate is how long it takes for full capacity to drain.
-	Create(name string, capacity uint, rate time.Duration) (Bucket, error)
+	Create(ctx context.Context, name string, capacity uint, rate time.Duration) (Bucket, error)
 }

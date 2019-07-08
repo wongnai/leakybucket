@@ -1,10 +1,11 @@
 package redis
 
 import (
+	"context"
 	"time"
 
-	"github.com/Clever/leakybucket"
-	"github.com/gomodule/redigo/redis"
+	"github.com/opencensus-integrations/redigo/redis"
+	"github.com/wongnai/leakybucket"
 )
 
 type bucket struct {
@@ -13,6 +14,7 @@ type bucket struct {
 	reset               time.Time
 	rate                time.Duration
 	pool                *redis.Pool
+	context             context.Context
 }
 
 func (b *bucket) Capacity() uint {
@@ -40,10 +42,10 @@ func (b *bucket) updateOldReset() error {
 		return nil
 	}
 
-	conn := b.pool.Get()
-	defer conn.Close()
+	conn := b.pool.GetWithContext(b.context).(redis.ConnWithContext)
+	defer conn.CloseContext(b.context)
 
-	ttl, err := conn.Do("PTTL", b.name)
+	ttl, err := conn.DoContext(b.context, "PTTL", b.name)
 	if err != nil {
 		return err
 	}
@@ -53,10 +55,10 @@ func (b *bucket) updateOldReset() error {
 
 // Add to the bucket.
 func (b *bucket) Add(amount uint) (leakybucket.BucketState, error) {
-	conn := b.pool.Get()
-	defer conn.Close()
+	conn := b.pool.GetWithContext(b.context).(redis.ConnWithContext)
+	defer conn.CloseContext(b.context)
 
-	if count, err := redis.Uint64(conn.Do("GET", b.name)); err != nil {
+	if count, err := redis.Uint64(conn.DoContext(b.context, "GET", b.name)); err != nil {
 		// handle the key not being set
 		if err == redis.ErrNil {
 			b.remaining = b.capacity
@@ -75,11 +77,11 @@ func (b *bucket) Add(amount uint) (leakybucket.BucketState, error) {
 	// Go y u no have Milliseconds method? Why only Seconds and Nanoseconds?
 	expiry := int(b.rate.Nanoseconds() / millisecond)
 
-	count, err := redis.Uint64(conn.Do("INCRBY", b.name, amount))
+	count, err := redis.Uint64(conn.DoContext(b.context, "INCRBY", b.name, amount))
 	if err != nil {
 		return b.State(), err
 	} else if uint(count) == amount {
-		if _, err := conn.Do("PEXPIRE", b.name, expiry); err != nil {
+		if _, err := conn.DoContext(b.context, "PEXPIRE", b.name, expiry); err != nil {
 			return b.State(), err
 		}
 	}
@@ -91,17 +93,21 @@ func (b *bucket) Add(amount uint) (leakybucket.BucketState, error) {
 	return b.State(), nil
 }
 
+func (b *bucket) SetContext(ctx context.Context) {
+	b.context = ctx
+}
+
 // Storage is a redis-based, non thread-safe leaky bucket factory.
 type Storage struct {
 	pool *redis.Pool
 }
 
 // Create a bucket.
-func (s *Storage) Create(name string, capacity uint, rate time.Duration) (leakybucket.Bucket, error) {
-	conn := s.pool.Get()
-	defer conn.Close()
+func (s *Storage) Create(ctx context.Context, name string, capacity uint, rate time.Duration) (leakybucket.Bucket, error) {
+	conn := s.pool.GetWithContext(ctx).(redis.ConnWithContext)
+	defer conn.CloseContext(ctx)
 
-	if count, err := redis.Uint64(conn.Do("GET", name)); err != nil {
+	if count, err := redis.Uint64(conn.DoContext(ctx, "GET", name)); err != nil {
 		if err != redis.ErrNil {
 			return nil, err
 		}
@@ -113,8 +119,9 @@ func (s *Storage) Create(name string, capacity uint, rate time.Duration) (leakyb
 			reset:     time.Now().Add(rate),
 			rate:      rate,
 			pool:      s.pool,
+			context:   ctx,
 		}, nil
-	} else if ttl, err := redis.Int64(conn.Do("PTTL", name)); err != nil {
+	} else if ttl, err := redis.Int64(conn.DoContext(ctx, "PTTL", name)); err != nil {
 		return nil, err
 	} else {
 		b := &bucket{
@@ -124,28 +131,10 @@ func (s *Storage) Create(name string, capacity uint, rate time.Duration) (leakyb
 			reset:     time.Now().Add(time.Duration(ttl * millisecond)),
 			rate:      rate,
 			pool:      s.pool,
+			context:   ctx,
 		}
 		return b, nil
 	}
-}
-
-// New initializes the connection to redis.
-func New(network, address string) (*Storage, error) {
-	// If we find we need to change this timeout per application, we may want to expose
-	// this as an extra config option
-	timeout := time.Duration(5000 * millisecond) // 5 seconds
-	s := &Storage{
-		pool: redis.NewPool(func() (redis.Conn, error) {
-			return redis.Dial(network, address, redis.DialReadTimeout(timeout), redis.DialWriteTimeout(timeout))
-		}, 5)}
-	// When using a connection pool, you only get connection errors while trying to send commands.
-	// Try to PING so we can fail-fast in the case of invalid address.
-	conn := s.pool.Get()
-	defer conn.Close()
-	if _, err := conn.Do("PING"); err != nil {
-		return nil, err
-	}
-	return s, nil
 }
 
 // NewFromPool create new Storage with existing connection pool

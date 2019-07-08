@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Clever/leakybucket"
+	"github.com/wongnai/leakybucket"
 )
 
 // CreateTest returns a test of bucket creation for a given storage backend.

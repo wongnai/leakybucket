@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Clever/leakybucket"
-	"github.com/Clever/leakybucket/test"
+	"github.com/wongnai/leakybucket"
+	"github.com/wongnai/leakybucket/test"
 )
 
 func getLocalStorage() *Storage {
